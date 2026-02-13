@@ -364,6 +364,61 @@ async function sync() {
     await query(`DELETE FROM gateway_status WHERE created_at < NOW() - INTERVAL '24 hours'`);
     await query(`DELETE FROM activity_log WHERE created_at < NOW() - INTERVAL '7 days'`);
 
+    // 9. Write sanitized snapshot for GitHub Pages (NO secrets)
+    try {
+      const snapshot = {
+        generated_at: new Date().toISOString(),
+        system: cara,
+        gateway: gw ? { status: gw.status, version: gw.version, pid: gw.pid, uptime: gw.uptime, created_at: new Date().toISOString() } : null,
+        sessions: [], // TODO: parse `openclaw status` into structured session objects
+        tasks: (tasks || []).map(t => ({
+          id: String(t.id),
+          title: t.title,
+          description: t.description || '',
+          col: t.column || t.col || 'ideas',
+          project: t.project || '',
+          time_minutes: t.timeMinutes || t.time_minutes || 0,
+          cost_estimate: t.costEstimate || t.cost_estimate || 0,
+        })),
+        activity: [{ event_type: 'sync', summary: 'Data sync completed', source: 'sync.js', created_at: new Date().toISOString() }],
+        fleet: [
+          { node_name: 'cara', role: 'primary', status: 'online', updated_at: new Date().toISOString() },
+          { node_name: 'fox', role: 'secondary', status: fox?.online ? 'online' : 'offline', updated_at: new Date().toISOString() },
+        ],
+        calendar: [],
+        errors: (errorLog ? errorLog.split('\n').filter(Boolean).slice(-10).map(line => ({
+          message: line.slice(0, 500),
+          severity: line.toLowerCase().includes('fatal') || line.toLowerCase().includes('panic') ? 'critical' : 'error',
+          source: 'gateway',
+          created_at: new Date().toISOString(),
+        })) : []),
+        services: [],
+      };
+
+      // Services snapshot from latest checks (re-run quickly from DB to normalize)
+      try {
+        const svc = await query('SELECT name, healthy, http_code, last_check FROM service_health ORDER BY name');
+        snapshot.services = (svc.rows || svc || []).map(r => ({
+          name: r.name,
+          healthy: !!r.healthy,
+          http_code: r.http_code,
+          last_check: r.last_check,
+        }));
+      } catch {}
+
+      // Calendar snapshot from today
+      try {
+        const cal = await query("SELECT title, event_hour, event_time, event_type, source, details, event_date FROM calendar_events WHERE event_date=CURRENT_DATE ORDER BY event_hour, event_time");
+        snapshot.calendar = (cal.rows || cal || []);
+      } catch {}
+
+      fs.mkdirSync(__dirname + '/data', { recursive: true });
+      fs.writeFileSync(__dirname + '/data/live.json', JSON.stringify(snapshot, null, 2));
+      console.log('  ✓ Wrote data/live.json');
+    } catch (e) {
+      console.log('  ! Snapshot write failed:', e.message);
+    }
+
     const elapsed = Date.now() - start;
     console.log(`[${new Date().toISOString()}] Sync complete in ${elapsed}ms`);
   } catch (err) {
