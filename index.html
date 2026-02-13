@@ -227,9 +227,10 @@ if (sessionStorage.getItem('cara-auth') === '1') {
 
 // ─── Data Source (sanitized JSON snapshot) ─────────────────────────────────
 // Expected shape matches cachedData fields: system,gateway,sessions,tasks,activity,fleet,calendar,errors,services
+const SNAPSHOT_URL = 'https://raw.githubusercontent.com/carayim-dev/cara-hq-data/main/live.json';
 async function fetchSnapshot() {
   try {
-    const res = await fetch('./data/live.json', { cache: 'no-store' });
+    const res = await fetch(SNAPSHOT_URL, { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return await res.json();
   } catch (e) {

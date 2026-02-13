@@ -9,6 +9,50 @@ const os = require('os');
 const https = require('https');
 const fs = require('fs');
 
+function pushToGitHub(token, repo, path, content) {
+  return new Promise(async (resolve, reject) => {
+    const base64 = Buffer.from(content).toString('base64');
+    // First get current SHA
+    const getSha = () => new Promise((res, rej) => {
+      const req = https.request({
+        hostname: 'api.github.com',
+        path: `/repos/${repo}/contents/${path}`,
+        method: 'GET',
+        headers: { 'Authorization': `token ${token}`, 'User-Agent': 'cara-sync', 'Accept': 'application/vnd.github.v3+json' },
+      }, (resp) => {
+        let d = ''; resp.on('data', c => d += c);
+        resp.on('end', () => { try { res(JSON.parse(d).sha || null); } catch { res(null); } });
+      });
+      req.on('error', rej); req.end();
+    });
+    
+    const sha = await getSha();
+    const body = JSON.stringify({ message: 'sync', content: base64, ...(sha ? { sha } : {}) });
+    
+    const req = https.request({
+      hostname: 'api.github.com',
+      path: `/repos/${repo}/contents/${path}`,
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${token}`,
+        'User-Agent': 'cara-sync',
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) return resolve(data);
+        reject(new Error(`HTTP ${res.statusCode}: ${data.slice(0,200)}`));
+      });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 // Set NEON_DATABASE_URL in environment or .env file
 const DATABASE_URL = process.env.NEON_DATABASE_URL || '';
@@ -413,8 +457,23 @@ async function sync() {
       } catch {}
 
       fs.mkdirSync(__dirname + '/data', { recursive: true });
-      fs.writeFileSync(__dirname + '/data/live.json', JSON.stringify(snapshot, null, 2));
+      const json = JSON.stringify(snapshot, null, 2);
+      fs.writeFileSync(__dirname + '/data/live.json', json);
       console.log('  ✓ Wrote data/live.json');
+
+      // Push snapshot to GitHub data repo (raw.githubusercontent serves it)
+      const ghToken = process.env.GITHUB_TOKEN || '';
+      const ghRepo = 'carayim-dev/cara-hq-data';
+      if (ghToken) {
+        try {
+          await pushToGitHub(ghToken, ghRepo, 'live.json', json);
+          console.log('  ✓ Pushed snapshot to GitHub');
+        } catch (e) {
+          console.log('  ! GitHub push failed:', e.message);
+        }
+      } else {
+        console.log('  ! GitHub push skipped (set GITHUB_TOKEN)');
+      }
     } catch (e) {
       console.log('  ! Snapshot write failed:', e.message);
     }
