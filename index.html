@@ -223,18 +223,20 @@ if (sessionStorage.getItem('cara-auth') === '1') {
   setTimeout(initDashboard, 0);
 }
 
-// ─── Neon Query ─────────────────────────────────────────────────────────────
+// ─── Neon Query (using serverless driver) ───────────────────────────────────
+let _neonSql = null;
+async function getNeonSql() {
+  if (_neonSql) return _neonSql;
+  const { neon } = await import('https://esm.sh/@neondatabase/serverless');
+  _neonSql = neon(NEON_CONFIG.connectionString);
+  return _neonSql;
+}
 async function neonSQL(query, params = []) {
   if (!NEON_CONFIG.connectionString) return { rows: [], error: 'No Neon configured' };
   try {
-    const resp = await fetch(`https://${NEON_CONFIG.host}/sql`, {
-      method: 'POST',
-      headers: { 'Neon-Connection-String': NEON_CONFIG.connectionString },
-      body: JSON.stringify({ query, params }),
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    return { rows: data.rows || [], fields: data.fields || [] };
+    const sql = await getNeonSql();
+    const rows = await sql(query, params);
+    return { rows: rows || [] };
   } catch (err) { return { rows: [], error: err.message }; }
 }
 
