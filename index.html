@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cara HQ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={darkMode:'class',theme:{extend:{}}}</script>
+  <style>
+    body { background: #030712; color: #e5e7eb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .tab-active { background: rgba(59,130,246,0.15); color: #60a5fa; }
+    .card { background: #111827; border: 1px solid #1f2937; border-radius: 0.75rem; padding: 1rem; }
+    .stat-box { background: rgba(31,41,55,0.5); border-radius: 0.5rem; padding: 0.75rem; text-align: center; }
+    .kanban-col { min-height: 120px; }
+    .task-card { background: #1f2937; border: 1px solid rgba(55,65,81,0.5); border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 0.5rem; cursor: grab; }
+    .task-card:active { cursor: grabbing; opacity: 0.8; }
+    .task-card.drag-over { border-color: #3b82f6; }
+    .drop-zone.drag-over { background: rgba(59,130,246,0.05); border-color: rgba(59,130,246,0.3); }
+    .pulse-green { animation: pulse-g 2s infinite; }
+    @keyframes pulse-g { 0%,100% { opacity:1 } 50% { opacity:0.5 } }
+    .badge { font-size: 0.625rem; padding: 0.125rem 0.375rem; border-radius: 0.25rem; border: 1px solid; }
+    .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+    #login-screen { backdrop-filter: blur(8px); }
+    .fade-in { animation: fadeIn 0.3s ease-in; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- Login Screen -->
+<div id="login-screen" class="fixed inset-0 z-[200] bg-gray-950/95 flex items-center justify-center">
+  <div class="card w-full max-w-sm mx-4 text-center">
+    <div class="text-4xl mb-3">🐾</div>
+    <h1 class="text-xl font-bold mb-1">Cara HQ</h1>
+    <p class="text-xs text-gray-500 mb-6">Mission Control & Workboard</p>
+    <input id="login-pw" type="password" placeholder="Password" 
+      class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 mb-3"
+      onkeydown="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()" class="w-full bg-blue-600 hover:bg-blue-500 rounded-lg py-2.5 text-sm font-medium transition-colors">Enter</button>
+    <p id="login-error" class="text-red-400 text-xs mt-2 hidden">Wrong password</p>
+  </div>
+</div>
+
+<!-- Main App -->
+<div id="app" class="hidden">
+  <!-- Header -->
+  <header class="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">🐾</span>
+        <div>
+          <h1 class="text-lg font-bold leading-tight">Cara HQ</h1>
+          <p class="text-[10px] text-gray-500 leading-tight">Mission Control & Workboard</p>
+        </div>
+      </div>
+      <nav id="nav-tabs" class="flex gap-1 overflow-x-auto">
+        <button onclick="switchTab('overview')" data-tab="overview" class="tab-btn px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap">📊 Overview</button>
+        <button onclick="switchTab('kanban')" data-tab="kanban" class="tab-btn px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap">📋 Kanban</button>
+        <button onclick="switchTab('sessions')" data-tab="sessions" class="tab-btn px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap">🔌 Sessions</button>
+        <button onclick="switchTab('activity')" data-tab="activity" class="tab-btn px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap">📊 Activity</button>
+      </nav>
+      <div class="flex items-center gap-3">
+        <span id="live-clock" class="font-mono text-sm text-gray-400"></span>
+        <span id="sync-indicator" class="text-xs text-gray-600">⏳</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto w-full p-4">
+    <!-- Overview Tab -->
+    <div id="tab-overview" class="tab-content">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-2 space-y-4">
+          <!-- Gateway Health -->
+          <div class="card" id="gateway-card">
+            <h2 class="font-semibold text-sm mb-3">🌐 Gateway Health</h2>
+            <div id="gateway-content" class="text-sm text-gray-400">Loading...</div>
+          </div>
+          <!-- Sessions Summary -->
+          <div class="card">
+            <h2 class="font-semibold text-sm mb-3">🔌 Active Sessions</h2>
+            <div id="sessions-summary" class="text-sm text-gray-400">Loading...</div>
+          </div>
+        </div>
+        <div class="space-y-4">
+          <!-- System Stats -->
+          <div class="card">
+            <h2 class="font-semibold text-sm mb-3">💻 System Stats</h2>
+            <div id="system-stats" class="space-y-3">Loading...</div>
+          </div>
+          <!-- Fleet Status -->
+          <div class="card">
+            <h2 class="font-semibold text-sm mb-3">🤖 Fleet</h2>
+            <div id="fleet-status" class="space-y-2">Loading...</div>
+          </div>
+          <!-- Quick Stats -->
+          <div class="card">
+            <h2 class="font-semibold text-sm mb-3">📋 Quick Stats</h2>
+            <div id="quick-stats" class="grid grid-cols-2 gap-3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Kanban Tab -->
+    <div id="tab-kanban" class="tab-content hidden">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold text-lg">📋 Workboard</h2>
+        <div id="kanban-filters" class="flex gap-2 flex-wrap"></div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="kanban-board"></div>
+    </div>
+
+    <!-- Sessions Tab -->
+    <div id="tab-sessions" class="tab-content hidden">
+      <h2 class="font-semibold text-lg mb-4">🔌 Sessions</h2>
+      <div id="sessions-full" class="space-y-3">Loading...</div>
+    </div>
+
+    <!-- Activity Tab -->
+    <div id="tab-activity" class="tab-content hidden">
+      <h2 class="font-semibold text-lg mb-4">📊 Activity Feed</h2>
+      <div id="activity-feed" class="space-y-2 max-h-[70vh] overflow-y-auto scrollbar-thin">Loading...</div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ─── Config ─────────────────────────────────────────────────────────────────
+// Replace with your Neon connection string (the HTTP endpoint)
+const NEON_CONFIG = {
+  // Your Neon project's SQL-over-HTTP endpoint
+  // Format: https://<project-id>.neon.tech
+  host: '', // e.g., 'ep-cool-name-123456.us-east-2.aws.neon.tech'
+  connectionString: '', // full postgres:// URL
+};
+
+const PASSWORD_HASH = 'f61f5c5e22749aeba2bd920352dbd4c9f63e0ebaed6df623b09c836ffcbec2eb'; // SHA-256 of "cara"
+const REFRESH_INTERVAL = 30000;
+
+// ─── Auth ───────────────────────────────────────────────────────────────────
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function doLogin() {
+  const pw = document.getElementById('login-pw').value;
+  const hash = await sha256(pw);
+  if (hash === PASSWORD_HASH) {
+    sessionStorage.setItem('cara-auth', '1');
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    initDashboard();
+  } else {
+    document.getElementById('login-error').classList.remove('hidden');
+    document.getElementById('login-pw').value = '';
+    document.getElementById('login-pw').focus();
+  }
+}
+
+// Auto-login if already authenticated
+if (sessionStorage.getItem('cara-auth') === '1') {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  setTimeout(initDashboard, 0);
+}
+
+// ─── Neon Query ─────────────────────────────────────────────────────────────
+async function neonSQL(query, params = []) {
+  if (!NEON_CONFIG.connectionString) {
+    return { rows: [], error: 'No Neon connection string configured' };
+  }
+  try {
+    const resp = await fetch(`https://${NEON_CONFIG.host}/sql`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Neon-Connection-String': NEON_CONFIG.connectionString,
+      },
+      body: JSON.stringify({ query, params }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    return { rows: data.rows || [], fields: data.fields || [] };
+  } catch (err) {
+    console.warn('Neon query error:', err.message);
+    return { rows: [], error: err.message };
+  }
+}
+
+// ─── Clock ──────────────────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('live-clock').textContent = 
+    new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+// ─── Tabs ───────────────────────────────────────────────────────────────────
+let activeTab = 'overview';
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.getElementById('tab-' + tab)?.classList.remove('hidden');
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('tab-active', btn.dataset.tab === tab);
+    if (btn.dataset.tab !== tab) {
+      btn.classList.add('text-gray-400', 'hover:text-gray-200', 'hover:bg-gray-800');
+    } else {
+      btn.classList.remove('text-gray-400', 'hover:text-gray-200', 'hover:bg-gray-800');
+    }
+  });
+}
+
+// ─── Data Loading ───────────────────────────────────────────────────────────
+let cachedData = { system: null, gateway: null, sessions: null, tasks: [], activity: [], fleet: [] };
+
+async function loadAllData() {
+  const indicator = document.getElementById('sync-indicator');
+  indicator.textContent = '🔄';
+  
+  try {
+    const [sysResult, gwResult, sessResult, taskResult, actResult, fleetResult] = await Promise.all([
+      neonSQL('SELECT * FROM system_snapshots WHERE node_name=$1 ORDER BY created_at DESC LIMIT 1', ['cara']),
+      neonSQL('SELECT * FROM gateway_status ORDER BY created_at DESC LIMIT 1'),
+      neonSQL('SELECT * FROM sessions ORDER BY created_at DESC LIMIT 20'),
+      neonSQL('SELECT * FROM kanban_tasks ORDER BY synced_at DESC'),
+      neonSQL('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 50'),
+      neonSQL('SELECT * FROM fleet_nodes ORDER BY node_name'),
+    ]);
+
+    cachedData.system = sysResult.rows?.[0] || null;
+    cachedData.gateway = gwResult.rows?.[0] || null;
+    cachedData.sessions = sessResult.rows || [];
+    cachedData.tasks = taskResult.rows || [];
+    cachedData.activity = actResult.rows || [];
+    cachedData.fleet = fleetResult.rows || [];
+
+    // If no Neon configured or all empty, show demo
+    const hasData = cachedData.system || cachedData.gateway || cachedData.tasks.length || cachedData.fleet.length;
+    if (!hasData) { renderDemoData(); return; }
+    renderAll();
+    indicator.textContent = '✅';
+    setTimeout(() => indicator.textContent = '', 2000);
+  } catch (err) {
+    console.error('Load error:', err);
+    indicator.textContent = '❌';
+    renderDemoData();
+  }
+}
+
+// ─── Renderers ──────────────────────────────────────────────────────────────
+function renderAll() {
+  renderSystemStats();
+  renderGateway();
+  renderFleet();
+  renderQuickStats();
+  renderSessions();
+  renderKanban();
+  renderActivity();
+}
+
+function renderSystemStats() {
+  const el = document.getElementById('system-stats');
+  const s = cachedData.system;
+  if (!s) { el.innerHTML = '<p class="text-gray-500 text-sm">No data yet</p>'; return; }
+  
+  const memPct = s.mem_total_gb > 0 ? ((s.mem_used_gb / s.mem_total_gb) * 100).toFixed(0) : 0;
+  const diskPct = s.disk_total_gb > 0 ? ((s.disk_used_gb / s.disk_total_gb) * 100).toFixed(0) : 0;
+  
+  el.innerHTML = `
+    <div>
+      <div class="flex justify-between text-xs mb-1"><span class="text-gray-400">CPU</span><span>${s.cpu_usage || 0}%</span></div>
+      <div class="w-full bg-gray-800 rounded-full h-2"><div class="bg-blue-500 rounded-full h-2 transition-all" style="width:${Math.min(s.cpu_usage || 0, 100)}%"></div></div>
+    </div>
+    <div>
+      <div class="flex justify-between text-xs mb-1"><span class="text-gray-400">Memory</span><span>${s.mem_used_gb?.toFixed(1) || 0} / ${s.mem_total_gb?.toFixed(0) || 0} GB (${memPct}%)</span></div>
+      <div class="w-full bg-gray-800 rounded-full h-2"><div class="bg-purple-500 rounded-full h-2 transition-all" style="width:${memPct}%"></div></div>
+    </div>
+    <div>
+      <div class="flex justify-between text-xs mb-1"><span class="text-gray-400">Disk</span><span>${s.disk_used_gb || 0} / ${s.disk_total_gb || 0} GB (${diskPct}%)</span></div>
+      <div class="w-full bg-gray-800 rounded-full h-2"><div class="bg-green-500 rounded-full h-2 transition-all" style="width:${diskPct}%"></div></div>
+    </div>
+    <div class="text-xs text-gray-500 mt-1">Load: ${s.load_avg || '—'} · Uptime: ${formatUptime(s.uptime_seconds)}</div>
+  `;
+}
+
+function renderGateway() {
+  const el = document.getElementById('gateway-content');
+  const g = cachedData.gateway;
+  if (!g) { el.innerHTML = '<p class="text-gray-500">No gateway data</p>'; return; }
+  
+  const isRunning = g.status === 'running';
+  el.innerHTML = `
+    <div class="flex items-center gap-3 mb-3">
+      <div class="w-3 h-3 rounded-full ${isRunning ? 'bg-green-400 pulse-green' : 'bg-red-400'}"></div>
+      <span class="font-medium ${isRunning ? 'text-green-400' : 'text-red-400'}">${g.status?.toUpperCase() || 'UNKNOWN'}</span>
+      ${g.version ? `<span class="text-xs text-gray-500">v${g.version}</span>` : ''}
+      ${g.pid ? `<span class="text-xs text-gray-600">PID ${g.pid}</span>` : ''}
+    </div>
+    ${g.uptime ? `<div class="text-xs text-gray-500">Uptime: ${g.uptime}</div>` : ''}
+    <div class="text-xs text-gray-600 mt-2">Last check: ${timeAgo(g.created_at)}</div>
+  `;
+}
+
+function renderFleet() {
+  const el = document.getElementById('fleet-status');
+  const nodes = cachedData.fleet;
+  if (!nodes.length) { el.innerHTML = '<p class="text-gray-500 text-sm">No fleet data</p>'; return; }
+  
+  el.innerHTML = nodes.map(n => `
+    <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-800">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span>${n.node_name === 'cara' ? '🐾' : '🦊'}</span>
+          <div>
+            <p class="text-sm font-medium capitalize">${n.node_name}</p>
+            <p class="text-xs text-gray-500">${n.role || 'agent'}</p>
+          </div>
+        </div>
+        <div class="w-2.5 h-2.5 rounded-full ${n.status === 'online' ? 'bg-green-400' : 'bg-red-400'}"></div>
+      </div>
+      <div class="text-xs text-gray-600 mt-1">Updated ${timeAgo(n.updated_at)}</div>
+    </div>
+  `).join('');
+}
+
+function renderQuickStats() {
+  const el = document.getElementById('quick-stats');
+  const tasks = cachedData.tasks;
+  const total = tasks.length;
+  const inProgress = tasks.filter(t => t.col === 'in-progress').length;
+  const done = tasks.filter(t => t.col === 'done').length;
+  const cost = tasks.reduce((s, t) => s + (parseFloat(t.cost_estimate) || 0), 0);
+  
+  el.innerHTML = `
+    <div class="stat-box"><div class="text-2xl font-bold text-blue-400">${total}</div><div class="text-xs text-gray-500">Total Tasks</div></div>
+    <div class="stat-box"><div class="text-2xl font-bold text-yellow-400">${inProgress}</div><div class="text-xs text-gray-500">In Progress</div></div>
+    <div class="stat-box"><div class="text-2xl font-bold text-green-400">${done}</div><div class="text-xs text-gray-500">Done</div></div>
+    <div class="stat-box"><div class="text-2xl font-bold text-purple-400">$${cost.toFixed(0)}</div><div class="text-xs text-gray-500">Total Cost</div></div>
+  `;
+}
+
+function renderSessions() {
+  const summaryEl = document.getElementById('sessions-summary');
+  const fullEl = document.getElementById('sessions-full');
+  const sessions = cachedData.sessions;
+  
+  if (!sessions.length) {
+    summaryEl.innerHTML = '<p class="text-gray-500">No active sessions</p>';
+    fullEl.innerHTML = '<p class="text-gray-500">No session data available</p>';
+    return;
+  }
+
+  // Sessions are stored as raw text snapshots
+  const renderSession = (s, compact) => {
+    const raw = s.raw_json;
+    if (typeof raw === 'string' && raw.length > 10) {
+      return `<div class="card fade-in"><pre class="text-xs text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto ${compact ? 'max-h-40' : ''}">${escapeHtml(raw)}</pre><div class="text-xs text-gray-600 mt-2">Captured ${timeAgo(s.created_at)}</div></div>`;
+    }
+    return `<div class="card fade-in"><pre class="text-xs text-gray-400">${escapeHtml(JSON.stringify(s, null, 2))}</pre></div>`;
+  };
+
+  summaryEl.innerHTML = sessions.slice(0, 3).map(s => renderSession(s, true)).join('');
+  fullEl.innerHTML = sessions.map(s => renderSession(s, false)).join('');
+}
+
+// ─── Kanban ─────────────────────────────────────────────────────────────────
+const COLUMNS = [
+  { id: 'ideas', label: 'Ideas', emoji: '💡' },
+  { id: 'queued', label: 'Queued', emoji: '📝' },
+  { id: 'in-progress', label: 'In Progress', emoji: '🔨' },
+  { id: 'done', label: 'Done', emoji: '✅' },
+];
+
+const PROJECT_COLORS = {
+  'Fleet': 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+  'Infrastructure': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  'TEAS Study Guide': 'bg-green-500/20 text-green-300 border-green-500/30',
+  'Other Projects': 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+};
+
+let kanbanFilter = 'all';
+
+function renderKanban() {
+  const board = document.getElementById('kanban-board');
+  const tasks = cachedData.tasks;
+  const filtered = kanbanFilter === 'all' ? tasks : tasks.filter(t => t.project === kanbanFilter);
+  
+  // Render filters
+  const projects = [...new Set(tasks.map(t => t.project).filter(Boolean))];
+  const filtersEl = document.getElementById('kanban-filters');
+  filtersEl.innerHTML = `
+    <button onclick="setKanbanFilter('all')" class="px-3 py-1 rounded-lg text-xs border transition-colors ${kanbanFilter === 'all' ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-gray-800 text-gray-400 border-gray-700'}">All</button>
+    ${projects.map(p => `<button onclick="setKanbanFilter('${p}')" class="px-3 py-1 rounded-lg text-xs border transition-colors ${kanbanFilter === p ? (PROJECT_COLORS[p]||'bg-gray-600/20 text-gray-300 border-gray-500/30') : 'bg-gray-800 text-gray-400 border-gray-700'}">${p}</button>`).join('')}
+  `;
+  
+  board.innerHTML = COLUMNS.map(col => {
+    const colTasks = filtered.filter(t => t.col === col.id);
+    return `
+      <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-3">
+        <h3 class="text-sm font-medium mb-3 flex items-center gap-2">
+          <span>${col.emoji}</span> ${col.label}
+          <span class="text-gray-600 text-xs">(${colTasks.length})</span>
+        </h3>
+        <div class="kanban-col drop-zone space-y-2" data-column="${col.id}"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="handleDrop(event,'${col.id}')">
+          ${colTasks.map(t => `
+            <div class="task-card" draggable="true" data-task-id="${t.id}"
+                 ondragstart="event.dataTransfer.setData('text/plain','${t.id}')">
+              <h4 class="text-sm font-medium mb-1">${escapeHtml(t.title)}</h4>
+              ${t.description ? `<p class="text-xs text-gray-500 mb-2 line-clamp-2">${escapeHtml(t.description)}</p>` : ''}
+              <div class="flex items-center gap-2 flex-wrap">
+                ${t.project ? `<span class="badge ${PROJECT_COLORS[t.project] || 'bg-gray-600/20 text-gray-300 border-gray-500/30'}">${escapeHtml(t.project)}</span>` : ''}
+                ${t.time_minutes > 0 ? `<span class="text-[10px] text-gray-500">⏱ ${formatTime(t.time_minutes)}</span>` : ''}
+                ${t.cost_estimate > 0 ? `<span class="text-[10px] text-gray-500">💰 $${parseFloat(t.cost_estimate).toFixed(2)}</span>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function setKanbanFilter(f) { kanbanFilter = f; renderKanban(); }
+
+function handleDrop(event, column) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('drag-over');
+  const taskId = event.dataTransfer.getData('text/plain');
+  // Update locally (visual feedback) — actual persistence via sync.js
+  const task = cachedData.tasks.find(t => t.id === taskId);
+  if (task) { task.col = column; renderKanban(); renderQuickStats(); }
+  // Note: to persist, you'd POST to an API or update Neon directly
+}
+
+// ─── Activity ───────────────────────────────────────────────────────────────
+function renderActivity() {
+  const el = document.getElementById('activity-feed');
+  const items = cachedData.activity;
+  if (!items.length) { el.innerHTML = '<p class="text-gray-500 text-sm">No activity yet</p>'; return; }
+  
+  const icons = { sync: '🔄', task: '📋', session: '🔌', gateway: '🌐', error: '❌' };
+  el.innerHTML = items.map(a => `
+    <div class="card fade-in flex items-start gap-3 !p-3">
+      <span>${icons[a.event_type] || '📌'}</span>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm">${escapeHtml(a.summary || '')}</p>
+        <p class="text-xs text-gray-600">${timeAgo(a.created_at)}${a.source ? ` · ${a.source}` : ''}</p>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ${mins % 60}m ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function formatUptime(seconds) {
+  if (!seconds) return '—';
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function formatTime(minutes) {
+  if (!minutes) return '0m';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+// ─── Demo Data (when Neon isn't configured) ─────────────────────────────────
+function renderDemoData() {
+  cachedData = {
+    system: { cpu_usage: 23.5, mem_total_gb: 24, mem_used_gb: 14.2, mem_free_gb: 9.8, disk_total_gb: 460, disk_used_gb: 187, disk_free_gb: 273, load_avg: '[1.2, 1.5, 1.8]', uptime_seconds: 432000 },
+    gateway: { status: 'running', version: '0.12.0', pid: 12345, uptime: '5d 2h', created_at: new Date().toISOString() },
+    sessions: [{ session_id: 'demo', raw_json: 'Gateway: running (PID 12345)\nActive sessions: 3\n  main (telegram) — claude-opus-4 — 45m\n  subagent:abc — claude-sonnet-4 — 2m\n  subagent:def — claude-sonnet-4 — 1m', created_at: new Date().toISOString() }],
+    tasks: [
+      { id: '1', title: 'Dashboard v2', description: 'Build static replacement', col: 'in-progress', project: 'Infrastructure', time_minutes: 120, cost_estimate: 5 },
+      { id: '2', title: 'Fleet health monitoring', col: 'queued', project: 'Fleet', time_minutes: 60, cost_estimate: 2 },
+      { id: '3', title: 'TEAS Chapter 4', col: 'done', project: 'TEAS Study Guide', time_minutes: 90, cost_estimate: 3 },
+      { id: '4', title: 'Neon DB setup', col: 'ideas', project: 'Infrastructure', time_minutes: 30, cost_estimate: 0 },
+    ],
+    activity: [
+      { event_type: 'sync', summary: 'Data sync completed', source: 'sync.js', created_at: new Date().toISOString() },
+      { event_type: 'gateway', summary: 'Gateway restarted', source: 'cron', created_at: new Date(Date.now() - 3600000).toISOString() },
+    ],
+    fleet: [
+      { node_name: 'cara', role: 'primary', status: 'online', updated_at: new Date().toISOString() },
+      { node_name: 'fox', role: 'secondary', status: 'offline', updated_at: new Date(Date.now() - 7200000).toISOString() },
+    ],
+  };
+  renderAll();
+  document.getElementById('sync-indicator').textContent = '🎭 Demo';
+}
+
+// ─── Init ───────────────────────────────────────────────────────────────────
+function initDashboard() {
+  switchTab('overview');
+  updateClock();
+  setInterval(updateClock, 1000);
+  loadAllData();
+  setInterval(loadAllData, REFRESH_INTERVAL);
+}
+</script>
+</body>
+</html>
