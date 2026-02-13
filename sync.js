@@ -292,7 +292,69 @@ async function sync() {
       console.log(`  ✓ Kanban tasks (${tasks.length})`);
     }
 
-    // 5. Activity log entry
+    // 5. Service health checks
+    const services = [
+      { name: 'TEAS Study Site', url: 'https://teas.nurse.org' },
+      { name: 'Nurse.org', url: 'https://nurse.org' },
+      { name: 'Cara HQ Dashboard', url: 'https://carayim-dev.github.io/cara-hq/' },
+    ];
+    for (const svc of services) {
+      let healthy = false, httpCode = 'error';
+      try {
+        const code = run(`curl -s -o /dev/null -w '%{http_code}' --max-time 5 '${svc.url}'`);
+        if (code) { httpCode = code; healthy = parseInt(code) >= 200 && parseInt(code) < 400; }
+      } catch {}
+      await query(
+        `INSERT INTO service_health (name, healthy, http_code, last_check, updated_at) VALUES ($1,$2,$3,NOW(),NOW())
+         ON CONFLICT (name) DO UPDATE SET healthy=$2, http_code=$3, last_check=NOW(), updated_at=NOW()`,
+        [svc.name, healthy, httpCode]
+      );
+    }
+    // Fox SSH health
+    const foxAlive = run(`ssh -o ConnectTimeout=3 ${FOX_SSH} echo ok 2>/dev/null`);
+    await query(
+      `INSERT INTO service_health (name, healthy, http_code, last_check, updated_at) VALUES ('Fox Mini (SSH)',$1,$2,NOW(),NOW())
+       ON CONFLICT (name) DO UPDATE SET healthy=$1, http_code=$2, last_check=NOW(), updated_at=NOW()`,
+      [!!foxAlive, foxAlive ? 'ok' : 'timeout']
+    );
+    console.log('  ✓ Service health');
+
+    // 6. Parse gateway errors from logs
+    const errorLog = run("grep -i 'error\\|fatal\\|panic' ~/.openclaw/logs/gateway.log 2>/dev/null | tail -20");
+    if (errorLog) {
+      const lines = errorLog.split('\n').filter(Boolean);
+      for (const line of lines.slice(-10)) {
+        const severity = line.toLowerCase().includes('fatal') || line.toLowerCase().includes('panic') ? 'critical' : 'error';
+        await query(
+          `INSERT INTO agent_errors (message, severity, source) VALUES ($1, $2, 'gateway')`,
+          [line.slice(0, 500), severity]
+        );
+      }
+      console.log(`  ✓ Errors (${lines.length} lines)`);
+    }
+
+    // 7. Calendar events from crontab
+    const crontab = run('crontab -l 2>/dev/null');
+    if (crontab) {
+      // Clear today's cron-sourced events and re-insert
+      await query(`DELETE FROM calendar_events WHERE event_type='cron' AND event_date=CURRENT_DATE`);
+      const cronLines = crontab.split('\n').filter(l => l.trim() && !l.startsWith('#'));
+      for (const line of cronLines) {
+        const m = line.match(/^(\d+|\*)\s+(\d+|\*)\s+/);
+        if (m) {
+          const hour = m[2] === '*' ? 0 : parseInt(m[2]);
+          const minute = m[1] === '*' ? '00' : m[1].padStart(2, '0');
+          const desc = line.replace(/^\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+/, '').slice(0, 100);
+          await query(
+            `INSERT INTO calendar_events (title, event_hour, event_time, event_type, source, details) VALUES ($1,$2,$3,'cron','Cara',$4)`,
+            [desc.split('&&')[0].trim() || 'Cron job', hour, `${String(hour).padStart(2,'0')}:${minute}`, desc]
+          );
+        }
+      }
+      console.log('  ✓ Calendar events');
+    }
+
+    // 8. Activity log entry
     await query(
       `INSERT INTO activity_log (event_type, summary, source) VALUES ('sync', 'Data sync completed', 'sync.js')`
     );

@@ -83,6 +83,43 @@ CREATE INDEX IF NOT EXISTS idx_sessions_time ON sessions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_activity_time ON activity_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_kanban_col ON kanban_tasks(col);
 
+-- Calendar events
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  event_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  event_hour INTEGER DEFAULT 0,        -- 0-23
+  event_time TEXT,                      -- 'HH:MM' display string
+  event_type TEXT,                      -- 'cron', 'scheduled', 'task', 'reminder'
+  source TEXT DEFAULT 'Cara',           -- 'Cara' or 'Fox'
+  details TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Agent errors
+CREATE TABLE IF NOT EXISTS agent_errors (
+  id SERIAL PRIMARY KEY,
+  message TEXT NOT NULL,
+  severity TEXT DEFAULT 'error',        -- 'critical', 'error', 'warning', 'info'
+  source TEXT,                          -- 'sync.js', 'gateway', 'browser', etc.
+  count INTEGER DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Service health checks
+CREATE TABLE IF NOT EXISTS service_health (
+  id SERIAL PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  healthy BOOLEAN DEFAULT true,
+  http_code TEXT,
+  last_check TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_calendar_date ON calendar_events(event_date, event_hour);
+CREATE INDEX IF NOT EXISTS idx_errors_time ON agent_errors(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_service_name ON service_health(name);
+
 -- Cleanup: keep only last 24h of snapshots (run periodically)
 -- DELETE FROM system_snapshots WHERE created_at < NOW() - INTERVAL '24 hours';
 -- DELETE FROM gateway_status WHERE created_at < NOW() - INTERVAL '24 hours';

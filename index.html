@@ -24,6 +24,13 @@
     #login-screen { backdrop-filter: blur(8px); }
     .fade-in { animation: fadeIn 0.3s ease-in; }
     @keyframes fadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+    .timeline-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+    .timeline-line { width: 1px; min-height: 20px; background: #374151; }
+    .token-bar { height: 4px; border-radius: 2px; transition: width 0.3s; }
+    .severity-critical { color: #f87171; }
+    .severity-error { color: #fb923c; }
+    .severity-warning { color: #fbbf24; }
+    .severity-info { color: #60a5fa; }
   </style>
 </head>
 <body class="min-h-screen">
@@ -34,7 +41,7 @@
     <div class="text-4xl mb-3">🐾</div>
     <h1 class="text-xl font-bold mb-1">Cara HQ</h1>
     <p class="text-xs text-gray-500 mb-6">Mission Control & Workboard</p>
-    <input id="login-pw" type="password" placeholder="Password" 
+    <input id="login-pw" type="password" placeholder="Password"
       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 mb-3"
       onkeydown="if(event.key==='Enter')doLogin()">
     <button onclick="doLogin()" class="w-full bg-blue-600 hover:bg-blue-500 rounded-lg py-2.5 text-sm font-medium transition-colors">Enter</button>
@@ -58,7 +65,9 @@
         <button onclick="switchTab('overview')" data-tab="overview" class="tab-btn px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap">📊 Overview</button>
         <button onclick="switchTab('kanban')" data-tab="kanban" class="tab-btn px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap">📋 Kanban</button>
         <button onclick="switchTab('sessions')" data-tab="sessions" class="tab-btn px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap">🔌 Sessions</button>
-        <button onclick="switchTab('activity')" data-tab="activity" class="tab-btn px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap">📊 Activity</button>
+        <button onclick="switchTab('calendar')" data-tab="calendar" class="tab-btn px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap">📅 Calendar</button>
+        <button onclick="switchTab('activity')" data-tab="activity" class="tab-btn px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap">⚡ Activity</button>
+        <button onclick="switchTab('search')" data-tab="search" class="tab-btn px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap">🔍 Search</button>
       </nav>
       <div class="flex items-center gap-3">
         <span id="live-clock" class="font-mono text-sm text-gray-400"></span>
@@ -81,6 +90,23 @@
           <div class="card">
             <h2 class="font-semibold text-sm mb-3">🔌 Active Sessions</h2>
             <div id="sessions-summary" class="text-sm text-gray-400">Loading...</div>
+          </div>
+          <!-- Agent Errors -->
+          <div class="card">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="font-semibold text-sm">🚨 Agent Health & Errors</h2>
+              <span id="error-summary-badge" class="text-xs text-green-400">✓ All clear</span>
+            </div>
+            <!-- Service Health -->
+            <div class="mb-3">
+              <p class="text-xs text-gray-500 mb-2 uppercase tracking-wider">Service Health</p>
+              <div id="service-health" class="space-y-1.5"></div>
+            </div>
+            <!-- Error Log -->
+            <div>
+              <p class="text-xs text-gray-500 mb-2 uppercase tracking-wider">Recent Errors</p>
+              <div id="error-log" class="space-y-1.5 max-h-60 overflow-y-auto scrollbar-thin"></div>
+            </div>
           </div>
         </div>
         <div class="space-y-4">
@@ -114,29 +140,63 @@
 
     <!-- Sessions Tab -->
     <div id="tab-sessions" class="tab-content hidden">
-      <h2 class="font-semibold text-lg mb-4">🔌 Sessions</h2>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold text-lg">🔌 Live Sessions <span id="session-count" class="text-gray-500 text-sm"></span></h2>
+        <div class="flex gap-2">
+          <button onclick="setSessionFilter('all')" id="sf-all" class="px-3 py-1 rounded-lg text-xs border bg-blue-600/20 text-blue-400 border-blue-500/30">All</button>
+          <button onclick="setSessionFilter('active')" id="sf-active" class="px-3 py-1 rounded-lg text-xs border bg-gray-800 text-gray-400 border-gray-700">Active</button>
+          <button onclick="setSessionFilter('idle')" id="sf-idle" class="px-3 py-1 rounded-lg text-xs border bg-gray-800 text-gray-400 border-gray-700">Idle</button>
+          <button onclick="setSessionFilter('completed')" id="sf-completed" class="px-3 py-1 rounded-lg text-xs border bg-gray-800 text-gray-400 border-gray-700">Completed</button>
+        </div>
+      </div>
       <div id="sessions-full" class="space-y-3">Loading...</div>
+    </div>
+
+    <!-- Calendar Tab -->
+    <div id="tab-calendar" class="tab-content hidden">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold text-lg">📅 Daily Timeline <span id="calendar-date" class="text-gray-500 text-sm ml-2"></span></h2>
+      </div>
+      <div id="calendar-timeline" class="relative">Loading...</div>
     </div>
 
     <!-- Activity Tab -->
     <div id="tab-activity" class="tab-content hidden">
-      <h2 class="font-semibold text-lg mb-4">📊 Activity Feed</h2>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold text-lg">⚡ Activity Feed <span id="activity-count" class="text-gray-500 text-sm"></span></h2>
+        <div class="flex gap-2">
+          <button onclick="setActivitySort('time')" id="as-time" class="text-xs px-2 py-1 rounded bg-blue-600/20 text-blue-400">Time ↓</button>
+          <button onclick="setActivitySort('category')" id="as-category" class="text-xs px-2 py-1 rounded text-gray-500 hover:text-gray-300">Category</button>
+        </div>
+      </div>
+      <div id="activity-filters" class="flex gap-2 mb-4 flex-wrap"></div>
       <div id="activity-feed" class="space-y-2 max-h-[70vh] overflow-y-auto scrollbar-thin">Loading...</div>
+    </div>
+
+    <!-- Search Tab -->
+    <div id="tab-search" class="tab-content hidden">
+      <h2 class="font-semibold text-lg mb-4">🔍 Global Search</h2>
+      <div class="flex gap-3 mb-4">
+        <input id="search-input" placeholder="Search sessions, tasks, activity..."
+          class="flex-1 bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500"
+          onkeydown="if(event.key==='Enter')doSearch()">
+        <button onclick="doSearch()" class="bg-blue-600 hover:bg-blue-500 px-6 rounded-xl text-sm font-medium transition-colors">Search</button>
+      </div>
+      <div id="search-type-filters" class="flex gap-2 mb-4">
+        <button onclick="setSearchFilter('all')" id="stf-all" class="px-3 py-1 rounded-lg text-xs border bg-blue-600/20 text-blue-400 border-blue-500/30">All</button>
+        <button onclick="setSearchFilter('session')" id="stf-session" class="px-3 py-1 rounded-lg text-xs border bg-gray-800 text-gray-400 border-gray-700">🔌 Sessions</button>
+        <button onclick="setSearchFilter('task')" id="stf-task" class="px-3 py-1 rounded-lg text-xs border bg-gray-800 text-gray-400 border-gray-700">📋 Tasks</button>
+        <button onclick="setSearchFilter('activity')" id="stf-activity" class="px-3 py-1 rounded-lg text-xs border bg-gray-800 text-gray-400 border-gray-700">⚡ Activity</button>
+      </div>
+      <div id="search-results"></div>
     </div>
   </main>
 </div>
 
 <script>
 // ─── Config ─────────────────────────────────────────────────────────────────
-// Replace with your Neon connection string (the HTTP endpoint)
-const NEON_CONFIG = {
-  // Your Neon project's SQL-over-HTTP endpoint
-  // Format: https://<project-id>.neon.tech
-  host: '', // e.g., 'ep-cool-name-123456.us-east-2.aws.neon.tech'
-  connectionString: '', // full postgres:// URL
-};
-
-const PASSWORD_HASH = 'f61f5c5e22749aeba2bd920352dbd4c9f63e0ebaed6df623b09c836ffcbec2eb'; // SHA-256 of "cara"
+const NEON_CONFIG = { host: '', connectionString: '' };
+const PASSWORD_HASH = 'f61f5c5e22749aeba2bd920352dbd4c9f63e0ebaed6df623b09c836ffcbec2eb';
 const REFRESH_INTERVAL = 30000;
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
@@ -144,11 +204,9 @@ async function sha256(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
-
 async function doLogin() {
   const pw = document.getElementById('login-pw').value;
-  const hash = await sha256(pw);
-  if (hash === PASSWORD_HASH) {
+  if (await sha256(pw) === PASSWORD_HASH) {
     sessionStorage.setItem('cara-auth', '1');
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
@@ -159,8 +217,6 @@ async function doLogin() {
     document.getElementById('login-pw').focus();
   }
 }
-
-// Auto-login if already authenticated
 if (sessionStorage.getItem('cara-auth') === '1') {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
@@ -169,30 +225,22 @@ if (sessionStorage.getItem('cara-auth') === '1') {
 
 // ─── Neon Query ─────────────────────────────────────────────────────────────
 async function neonSQL(query, params = []) {
-  if (!NEON_CONFIG.connectionString) {
-    return { rows: [], error: 'No Neon connection string configured' };
-  }
+  if (!NEON_CONFIG.connectionString) return { rows: [], error: 'No Neon configured' };
   try {
     const resp = await fetch(`https://${NEON_CONFIG.host}/sql`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Neon-Connection-String': NEON_CONFIG.connectionString,
-      },
+      headers: { 'Content-Type': 'application/json', 'Neon-Connection-String': NEON_CONFIG.connectionString },
       body: JSON.stringify({ query, params }),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     return { rows: data.rows || [], fields: data.fields || [] };
-  } catch (err) {
-    console.warn('Neon query error:', err.message);
-    return { rows: [], error: err.message };
-  }
+  } catch (err) { return { rows: [], error: err.message }; }
 }
 
 // ─── Clock ──────────────────────────────────────────────────────────────────
 function updateClock() {
-  document.getElementById('live-clock').textContent = 
+  document.getElementById('live-clock').textContent =
     new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
 }
 
@@ -204,39 +252,44 @@ function switchTab(tab) {
   document.getElementById('tab-' + tab)?.classList.remove('hidden');
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.toggle('tab-active', btn.dataset.tab === tab);
-    if (btn.dataset.tab !== tab) {
-      btn.classList.add('text-gray-400', 'hover:text-gray-200', 'hover:bg-gray-800');
-    } else {
-      btn.classList.remove('text-gray-400', 'hover:text-gray-200', 'hover:bg-gray-800');
-    }
+    if (btn.dataset.tab !== tab) btn.classList.add('text-gray-400', 'hover:text-gray-200', 'hover:bg-gray-800');
+    else btn.classList.remove('text-gray-400', 'hover:text-gray-200', 'hover:bg-gray-800');
   });
+  if (tab === 'search') document.getElementById('search-input')?.focus();
 }
 
-// ─── Data Loading ───────────────────────────────────────────────────────────
-let cachedData = { system: null, gateway: null, sessions: null, tasks: [], activity: [], fleet: [] };
+// ─── State ──────────────────────────────────────────────────────────────────
+let cachedData = { system: null, gateway: null, sessions: [], tasks: [], activity: [], fleet: [], calendar: [], errors: [], services: [] };
+let sessionFilter = 'all';
+let activityFilter = 'all';
+let activitySort = 'time';
+let searchFilter = 'all';
 
+// ─── Data Loading ───────────────────────────────────────────────────────────
 async function loadAllData() {
   const indicator = document.getElementById('sync-indicator');
   indicator.textContent = '🔄';
-  
   try {
-    const [sysResult, gwResult, sessResult, taskResult, actResult, fleetResult] = await Promise.all([
+    const [sysR, gwR, sessR, taskR, actR, fleetR, calR, errR, svcR] = await Promise.all([
       neonSQL('SELECT * FROM system_snapshots WHERE node_name=$1 ORDER BY created_at DESC LIMIT 1', ['cara']),
       neonSQL('SELECT * FROM gateway_status ORDER BY created_at DESC LIMIT 1'),
       neonSQL('SELECT * FROM sessions ORDER BY created_at DESC LIMIT 20'),
       neonSQL('SELECT * FROM kanban_tasks ORDER BY synced_at DESC'),
-      neonSQL('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 50'),
+      neonSQL('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 100'),
       neonSQL('SELECT * FROM fleet_nodes ORDER BY node_name'),
+      neonSQL('SELECT * FROM calendar_events WHERE event_date >= CURRENT_DATE ORDER BY event_hour, event_time'),
+      neonSQL('SELECT * FROM agent_errors ORDER BY created_at DESC LIMIT 50'),
+      neonSQL('SELECT * FROM service_health ORDER BY name'),
     ]);
-
-    cachedData.system = sysResult.rows?.[0] || null;
-    cachedData.gateway = gwResult.rows?.[0] || null;
-    cachedData.sessions = sessResult.rows || [];
-    cachedData.tasks = taskResult.rows || [];
-    cachedData.activity = actResult.rows || [];
-    cachedData.fleet = fleetResult.rows || [];
-
-    // If no Neon configured or all empty, show demo
+    cachedData.system = sysR.rows?.[0] || null;
+    cachedData.gateway = gwR.rows?.[0] || null;
+    cachedData.sessions = sessR.rows || [];
+    cachedData.tasks = taskR.rows || [];
+    cachedData.activity = actR.rows || [];
+    cachedData.fleet = fleetR.rows || [];
+    cachedData.calendar = calR.rows || [];
+    cachedData.errors = errR.rows || [];
+    cachedData.services = svcR.rows || [];
     const hasData = cachedData.system || cachedData.gateway || cachedData.tasks.length || cachedData.fleet.length;
     if (!hasData) { renderDemoData(); return; }
     renderAll();
@@ -251,265 +304,459 @@ async function loadAllData() {
 
 // ─── Renderers ──────────────────────────────────────────────────────────────
 function renderAll() {
-  renderSystemStats();
-  renderGateway();
-  renderFleet();
-  renderQuickStats();
-  renderSessions();
-  renderKanban();
-  renderActivity();
+  renderSystemStats(); renderGateway(); renderFleet(); renderQuickStats();
+  renderSessionsSummary(); renderSessionsFull(); renderKanban();
+  renderActivity(); renderCalendar(); renderErrors(); renderServices();
 }
 
 function renderSystemStats() {
   const el = document.getElementById('system-stats');
   const s = cachedData.system;
   if (!s) { el.innerHTML = '<p class="text-gray-500 text-sm">No data yet</p>'; return; }
-  
   const memPct = s.mem_total_gb > 0 ? ((s.mem_used_gb / s.mem_total_gb) * 100).toFixed(0) : 0;
   const diskPct = s.disk_total_gb > 0 ? ((s.disk_used_gb / s.disk_total_gb) * 100).toFixed(0) : 0;
-  
   el.innerHTML = `
-    <div>
-      <div class="flex justify-between text-xs mb-1"><span class="text-gray-400">CPU</span><span>${s.cpu_usage || 0}%</span></div>
-      <div class="w-full bg-gray-800 rounded-full h-2"><div class="bg-blue-500 rounded-full h-2 transition-all" style="width:${Math.min(s.cpu_usage || 0, 100)}%"></div></div>
-    </div>
-    <div>
-      <div class="flex justify-between text-xs mb-1"><span class="text-gray-400">Memory</span><span>${s.mem_used_gb?.toFixed(1) || 0} / ${s.mem_total_gb?.toFixed(0) || 0} GB (${memPct}%)</span></div>
-      <div class="w-full bg-gray-800 rounded-full h-2"><div class="bg-purple-500 rounded-full h-2 transition-all" style="width:${memPct}%"></div></div>
-    </div>
-    <div>
-      <div class="flex justify-between text-xs mb-1"><span class="text-gray-400">Disk</span><span>${s.disk_used_gb || 0} / ${s.disk_total_gb || 0} GB (${diskPct}%)</span></div>
-      <div class="w-full bg-gray-800 rounded-full h-2"><div class="bg-green-500 rounded-full h-2 transition-all" style="width:${diskPct}%"></div></div>
-    </div>
-    <div class="text-xs text-gray-500 mt-1">Load: ${s.load_avg || '—'} · Uptime: ${formatUptime(s.uptime_seconds)}</div>
-  `;
+    <div><div class="flex justify-between text-xs mb-1"><span class="text-gray-400">CPU</span><span>${s.cpu_usage||0}%</span></div>
+      <div class="w-full bg-gray-800 rounded-full h-2"><div class="bg-blue-500 rounded-full h-2 transition-all" style="width:${Math.min(s.cpu_usage||0,100)}%"></div></div></div>
+    <div><div class="flex justify-between text-xs mb-1"><span class="text-gray-400">Memory</span><span>${s.mem_used_gb?.toFixed(1)||0} / ${s.mem_total_gb?.toFixed(0)||0} GB (${memPct}%)</span></div>
+      <div class="w-full bg-gray-800 rounded-full h-2"><div class="bg-purple-500 rounded-full h-2 transition-all" style="width:${memPct}%"></div></div></div>
+    <div><div class="flex justify-between text-xs mb-1"><span class="text-gray-400">Disk</span><span>${s.disk_used_gb||0} / ${s.disk_total_gb||0} GB (${diskPct}%)</span></div>
+      <div class="w-full bg-gray-800 rounded-full h-2"><div class="bg-green-500 rounded-full h-2 transition-all" style="width:${diskPct}%"></div></div></div>
+    <div class="text-xs text-gray-500 mt-1">Load: ${s.load_avg||'—'} · Uptime: ${formatUptime(s.uptime_seconds)}</div>`;
 }
 
 function renderGateway() {
   const el = document.getElementById('gateway-content');
   const g = cachedData.gateway;
   if (!g) { el.innerHTML = '<p class="text-gray-500">No gateway data</p>'; return; }
-  
   const isRunning = g.status === 'running';
   el.innerHTML = `
     <div class="flex items-center gap-3 mb-3">
       <div class="w-3 h-3 rounded-full ${isRunning ? 'bg-green-400 pulse-green' : 'bg-red-400'}"></div>
-      <span class="font-medium ${isRunning ? 'text-green-400' : 'text-red-400'}">${g.status?.toUpperCase() || 'UNKNOWN'}</span>
+      <span class="font-medium ${isRunning ? 'text-green-400' : 'text-red-400'}">${g.status?.toUpperCase()||'UNKNOWN'}</span>
       ${g.version ? `<span class="text-xs text-gray-500">v${g.version}</span>` : ''}
       ${g.pid ? `<span class="text-xs text-gray-600">PID ${g.pid}</span>` : ''}
     </div>
     ${g.uptime ? `<div class="text-xs text-gray-500">Uptime: ${g.uptime}</div>` : ''}
-    <div class="text-xs text-gray-600 mt-2">Last check: ${timeAgo(g.created_at)}</div>
-  `;
+    <div class="text-xs text-gray-600 mt-2">Last check: ${timeAgo(g.created_at)}</div>`;
 }
 
 function renderFleet() {
   const el = document.getElementById('fleet-status');
   const nodes = cachedData.fleet;
   if (!nodes.length) { el.innerHTML = '<p class="text-gray-500 text-sm">No fleet data</p>'; return; }
-  
   el.innerHTML = nodes.map(n => `
     <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-800">
       <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <span>${n.node_name === 'cara' ? '🐾' : '🦊'}</span>
-          <div>
-            <p class="text-sm font-medium capitalize">${n.node_name}</p>
-            <p class="text-xs text-gray-500">${n.role || 'agent'}</p>
-          </div>
-        </div>
-        <div class="w-2.5 h-2.5 rounded-full ${n.status === 'online' ? 'bg-green-400' : 'bg-red-400'}"></div>
-      </div>
-      <div class="text-xs text-gray-600 mt-1">Updated ${timeAgo(n.updated_at)}</div>
-    </div>
-  `).join('');
+        <div class="flex items-center gap-2"><span>${n.node_name==='cara'?'🐾':'🦊'}</span>
+          <div><p class="text-sm font-medium capitalize">${n.node_name}</p><p class="text-xs text-gray-500">${n.role||'agent'}</p></div></div>
+        <div class="w-2.5 h-2.5 rounded-full ${n.status==='online'?'bg-green-400':'bg-red-400'}"></div>
+      </div><div class="text-xs text-gray-600 mt-1">Updated ${timeAgo(n.updated_at)}</div>
+    </div>`).join('');
 }
 
 function renderQuickStats() {
   const el = document.getElementById('quick-stats');
   const tasks = cachedData.tasks;
-  const total = tasks.length;
-  const inProgress = tasks.filter(t => t.col === 'in-progress').length;
-  const done = tasks.filter(t => t.col === 'done').length;
-  const cost = tasks.reduce((s, t) => s + (parseFloat(t.cost_estimate) || 0), 0);
-  
+  const total = tasks.length, inProgress = tasks.filter(t=>t.col==='in-progress').length;
+  const done = tasks.filter(t=>t.col==='done').length;
+  const cost = tasks.reduce((s,t)=>s+(parseFloat(t.cost_estimate)||0),0);
   el.innerHTML = `
     <div class="stat-box"><div class="text-2xl font-bold text-blue-400">${total}</div><div class="text-xs text-gray-500">Total Tasks</div></div>
     <div class="stat-box"><div class="text-2xl font-bold text-yellow-400">${inProgress}</div><div class="text-xs text-gray-500">In Progress</div></div>
     <div class="stat-box"><div class="text-2xl font-bold text-green-400">${done}</div><div class="text-xs text-gray-500">Done</div></div>
-    <div class="stat-box"><div class="text-2xl font-bold text-purple-400">$${cost.toFixed(0)}</div><div class="text-xs text-gray-500">Total Cost</div></div>
-  `;
+    <div class="stat-box"><div class="text-2xl font-bold text-purple-400">$${cost.toFixed(0)}</div><div class="text-xs text-gray-500">Total Cost</div></div>`;
 }
 
-function renderSessions() {
-  const summaryEl = document.getElementById('sessions-summary');
-  const fullEl = document.getElementById('sessions-full');
+// ─── Sessions (rich) ────────────────────────────────────────────────────────
+function renderSessionsSummary() {
+  const el = document.getElementById('sessions-summary');
   const sessions = cachedData.sessions;
-  
-  if (!sessions.length) {
-    summaryEl.innerHTML = '<p class="text-gray-500">No active sessions</p>';
-    fullEl.innerHTML = '<p class="text-gray-500">No session data available</p>';
-    return;
+  if (!sessions.length) { el.innerHTML = '<p class="text-gray-500">No active sessions</p>'; return; }
+  el.innerHTML = sessions.slice(0,3).map(s => renderSessionCard(s, true)).join('');
+}
+
+function renderSessionsFull() {
+  const el = document.getElementById('sessions-full');
+  const sessions = cachedData.sessions;
+  if (!sessions.length) { el.innerHTML = '<p class="text-gray-500">No session data available</p>'; return; }
+  const filtered = sessionFilter === 'all' ? sessions : sessions.filter(s => s.status === sessionFilter);
+  document.getElementById('session-count').textContent = `(${filtered.length})`;
+  el.innerHTML = filtered.map(s => renderSessionCard(s, false)).join('');
+}
+
+function renderSessionCard(s, compact) {
+  // Rich session with model/tokens/cost/channel/status
+  if (s.model && s.model !== 'unknown') {
+    const pct = s.token_pct || 0;
+    const barColor = pct > 80 ? 'bg-red-400' : pct > 50 ? 'bg-yellow-400' : 'bg-blue-400';
+    const statusColor = s.status === 'active' ? 'text-green-400' : s.status === 'idle' ? 'text-yellow-400' : 'text-gray-500';
+    const statusDot = s.status === 'active' ? 'bg-green-400' : s.status === 'idle' ? 'bg-yellow-400' : 'bg-gray-500';
+    const kindIcon = s.channel === 'telegram' ? '💬' : s.channel === 'group' ? '👥' : '🔌';
+    const sourceIcon = s.source === 'Fox' ? '🦊' : '🐾';
+    const sourceBg = s.source === 'Fox' ? 'bg-orange-500/20 text-orange-300' : 'bg-blue-500/20 text-blue-300';
+    return `<div class="card fade-in">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <span>${kindIcon}</span>
+          <span class="text-sm font-medium truncate max-w-[300px]">${escapeHtml(s.session_id||s.key||'')}</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded ${sourceBg}">${sourceIcon} ${s.source||'Cara'}</span>
+          <div class="w-2 h-2 rounded-full ${statusDot}"></div>
+          <span class="text-xs ${statusColor} capitalize">${s.status||'active'}</span>
+        </div>
+        <span class="text-xs text-gray-500">${s.age||timeAgo(s.created_at)}</span>
+      </div>
+      <div class="flex items-center justify-between text-xs text-gray-400 mb-1">
+        <span>🤖 ${escapeHtml(s.model)}</span>
+        <span>${s.tokens||''} ${pct>0?`(${pct}%)`:''}</span>
+      </div>
+      <div class="w-full bg-gray-700 rounded-full h-1 mb-2"><div class="${barColor} rounded-full h-1" style="width:${pct}%"></div></div>
+      ${!compact ? `<div class="flex items-center gap-4 text-xs text-gray-500">
+        ${s.channel ? `<span>📡 ${s.channel}</span>` : ''}
+        ${s.cost ? `<span>💰 $${parseFloat(s.cost).toFixed(4)}</span>` : ''}
+        ${s.messages ? `<span>💬 ${s.messages} msgs</span>` : ''}
+      </div>` : ''}
+    </div>`;
   }
+  // Fallback: raw text
+  const raw = s.raw_json;
+  if (typeof raw === 'string' && raw.length > 10) {
+    return `<div class="card fade-in"><pre class="text-xs text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto ${compact?'max-h-40':''}">${escapeHtml(raw)}</pre><div class="text-xs text-gray-600 mt-2">Captured ${timeAgo(s.created_at)}</div></div>`;
+  }
+  return `<div class="card fade-in"><pre class="text-xs text-gray-400">${escapeHtml(JSON.stringify(s,null,2))}</pre></div>`;
+}
 
-  // Sessions are stored as raw text snapshots
-  const renderSession = (s, compact) => {
-    const raw = s.raw_json;
-    if (typeof raw === 'string' && raw.length > 10) {
-      return `<div class="card fade-in"><pre class="text-xs text-gray-300 whitespace-pre-wrap font-mono overflow-x-auto ${compact ? 'max-h-40' : ''}">${escapeHtml(raw)}</pre><div class="text-xs text-gray-600 mt-2">Captured ${timeAgo(s.created_at)}</div></div>`;
-    }
-    return `<div class="card fade-in"><pre class="text-xs text-gray-400">${escapeHtml(JSON.stringify(s, null, 2))}</pre></div>`;
-  };
-
-  summaryEl.innerHTML = sessions.slice(0, 3).map(s => renderSession(s, true)).join('');
-  fullEl.innerHTML = sessions.map(s => renderSession(s, false)).join('');
+function setSessionFilter(f) {
+  sessionFilter = f;
+  ['all','active','idle','completed'].forEach(x => {
+    const btn = document.getElementById('sf-'+x);
+    if (f===x) { btn.className='px-3 py-1 rounded-lg text-xs border bg-blue-600/20 text-blue-400 border-blue-500/30'; }
+    else { btn.className='px-3 py-1 rounded-lg text-xs border bg-gray-800 text-gray-400 border-gray-700'; }
+  });
+  renderSessionsFull();
 }
 
 // ─── Kanban ─────────────────────────────────────────────────────────────────
 const COLUMNS = [
-  { id: 'ideas', label: 'Ideas', emoji: '💡' },
-  { id: 'queued', label: 'Queued', emoji: '📝' },
-  { id: 'in-progress', label: 'In Progress', emoji: '🔨' },
-  { id: 'done', label: 'Done', emoji: '✅' },
+  { id:'ideas', label:'Ideas', emoji:'💡' }, { id:'queued', label:'Queued', emoji:'📝' },
+  { id:'in-progress', label:'In Progress', emoji:'🔨' }, { id:'done', label:'Done', emoji:'✅' },
 ];
-
 const PROJECT_COLORS = {
-  'Fleet': 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-  'Infrastructure': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-  'TEAS Study Guide': 'bg-green-500/20 text-green-300 border-green-500/30',
-  'Other Projects': 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+  'Fleet':'bg-purple-500/20 text-purple-300 border-purple-500/30',
+  'Infrastructure':'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  'TEAS Study Guide':'bg-green-500/20 text-green-300 border-green-500/30',
+  'Other Projects':'bg-orange-500/20 text-orange-300 border-orange-500/30',
 };
-
 let kanbanFilter = 'all';
 
 function renderKanban() {
   const board = document.getElementById('kanban-board');
   const tasks = cachedData.tasks;
-  const filtered = kanbanFilter === 'all' ? tasks : tasks.filter(t => t.project === kanbanFilter);
-  
-  // Render filters
-  const projects = [...new Set(tasks.map(t => t.project).filter(Boolean))];
-  const filtersEl = document.getElementById('kanban-filters');
-  filtersEl.innerHTML = `
-    <button onclick="setKanbanFilter('all')" class="px-3 py-1 rounded-lg text-xs border transition-colors ${kanbanFilter === 'all' ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' : 'bg-gray-800 text-gray-400 border-gray-700'}">All</button>
-    ${projects.map(p => `<button onclick="setKanbanFilter('${p}')" class="px-3 py-1 rounded-lg text-xs border transition-colors ${kanbanFilter === p ? (PROJECT_COLORS[p]||'bg-gray-600/20 text-gray-300 border-gray-500/30') : 'bg-gray-800 text-gray-400 border-gray-700'}">${p}</button>`).join('')}
-  `;
-  
+  const filtered = kanbanFilter==='all' ? tasks : tasks.filter(t=>t.project===kanbanFilter);
+  const projects = [...new Set(tasks.map(t=>t.project).filter(Boolean))];
+  document.getElementById('kanban-filters').innerHTML = `
+    <button onclick="setKanbanFilter('all')" class="px-3 py-1 rounded-lg text-xs border transition-colors ${kanbanFilter==='all'?'bg-blue-600/20 text-blue-400 border-blue-500/30':'bg-gray-800 text-gray-400 border-gray-700'}">All</button>
+    ${projects.map(p=>`<button onclick="setKanbanFilter('${p}')" class="px-3 py-1 rounded-lg text-xs border transition-colors ${kanbanFilter===p?(PROJECT_COLORS[p]||'bg-gray-600/20 text-gray-300 border-gray-500/30'):'bg-gray-800 text-gray-400 border-gray-700'}">${p}</button>`).join('')}`;
   board.innerHTML = COLUMNS.map(col => {
-    const colTasks = filtered.filter(t => t.col === col.id);
-    return `
-      <div class="bg-gray-900/50 border border-gray-800 rounded-xl p-3">
-        <h3 class="text-sm font-medium mb-3 flex items-center gap-2">
-          <span>${col.emoji}</span> ${col.label}
-          <span class="text-gray-600 text-xs">(${colTasks.length})</span>
-        </h3>
-        <div class="kanban-col drop-zone space-y-2" data-column="${col.id}"
-             ondragover="event.preventDefault();this.classList.add('drag-over')"
-             ondragleave="this.classList.remove('drag-over')"
-             ondrop="handleDrop(event,'${col.id}')">
-          ${colTasks.map(t => `
-            <div class="task-card" draggable="true" data-task-id="${t.id}"
-                 ondragstart="event.dataTransfer.setData('text/plain','${t.id}')">
-              <h4 class="text-sm font-medium mb-1">${escapeHtml(t.title)}</h4>
-              ${t.description ? `<p class="text-xs text-gray-500 mb-2 line-clamp-2">${escapeHtml(t.description)}</p>` : ''}
-              <div class="flex items-center gap-2 flex-wrap">
-                ${t.project ? `<span class="badge ${PROJECT_COLORS[t.project] || 'bg-gray-600/20 text-gray-300 border-gray-500/30'}">${escapeHtml(t.project)}</span>` : ''}
-                ${t.time_minutes > 0 ? `<span class="text-[10px] text-gray-500">⏱ ${formatTime(t.time_minutes)}</span>` : ''}
-                ${t.cost_estimate > 0 ? `<span class="text-[10px] text-gray-500">💰 $${parseFloat(t.cost_estimate).toFixed(2)}</span>` : ''}
-              </div>
+    const colTasks = filtered.filter(t=>t.col===col.id);
+    return `<div class="bg-gray-900/50 border border-gray-800 rounded-xl p-3">
+      <h3 class="text-sm font-medium mb-3 flex items-center gap-2"><span>${col.emoji}</span> ${col.label} <span class="text-gray-600 text-xs">(${colTasks.length})</span></h3>
+      <div class="kanban-col drop-zone space-y-2" data-column="${col.id}" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleDrop(event,'${col.id}')">
+        ${colTasks.map(t=>`<div class="task-card" draggable="true" data-task-id="${t.id}" ondragstart="event.dataTransfer.setData('text/plain','${t.id}')">
+          <h4 class="text-sm font-medium mb-1">${escapeHtml(t.title)}</h4>
+          ${t.description?`<p class="text-xs text-gray-500 mb-2 line-clamp-2">${escapeHtml(t.description)}</p>`:''}
+          <div class="flex items-center gap-2 flex-wrap">
+            ${t.project?`<span class="badge ${PROJECT_COLORS[t.project]||'bg-gray-600/20 text-gray-300 border-gray-500/30'}">${escapeHtml(t.project)}</span>`:''}
+            ${t.time_minutes>0?`<span class="text-[10px] text-gray-500">⏱ ${formatTime(t.time_minutes)}</span>`:''}
+            ${t.cost_estimate>0?`<span class="text-[10px] text-gray-500">💰 $${parseFloat(t.cost_estimate).toFixed(2)}</span>`:''}
+          </div></div>`).join('')}
+      </div></div>`;
+  }).join('');
+}
+function setKanbanFilter(f) { kanbanFilter=f; renderKanban(); }
+function handleDrop(event,column) {
+  event.preventDefault(); event.currentTarget.classList.remove('drag-over');
+  const taskId = event.dataTransfer.getData('text/plain');
+  const task = cachedData.tasks.find(t=>t.id===taskId);
+  if (task) { task.col=column; renderKanban(); renderQuickStats(); }
+}
+
+// ─── Calendar ───────────────────────────────────────────────────────────────
+function renderCalendar() {
+  const el = document.getElementById('calendar-timeline');
+  const events = cachedData.calendar;
+  const dateEl = document.getElementById('calendar-date');
+  if (!events.length) { el.innerHTML = '<div class="card text-center py-8"><p class="text-2xl mb-2">📝</p><p class="text-gray-500">No events scheduled</p></div>'; return; }
+
+  dateEl.textContent = events[0]?.event_date || new Date().toLocaleDateString();
+
+  // Group by hour
+  const hourGroups = {};
+  for (const e of events) {
+    const h = e.event_hour ?? 0;
+    if (!hourGroups[h]) hourGroups[h] = [];
+    hourGroups[h].push(e);
+  }
+  const hours = Object.keys(hourGroups).map(Number).sort((a,b)=>a-b);
+  const formatHour = h => h===0?'12 AM':h<12?`${h} AM`:h===12?'12 PM':`${h-12} PM`;
+  const sourceColor = src => src==='Fox'?'border-orange-500/50 bg-orange-500/5':'border-blue-500/50 bg-blue-500/5';
+  const sourceIcon = src => src==='Fox'?'🦊':'🐾';
+
+  el.innerHTML = hours.map(hour => `
+    <div class="flex gap-4 mb-4">
+      <div class="w-16 shrink-0 text-right"><span class="text-xs font-mono text-gray-500">${formatHour(hour)}</span></div>
+      <div class="relative flex flex-col items-center"><div class="timeline-dot bg-blue-500"></div><div class="timeline-line flex-1"></div></div>
+      <div class="flex-1 space-y-2 pb-2">
+        ${hourGroups[hour].map(e => `
+          <div class="border rounded-lg p-3 ${sourceColor(e.source)}">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-sm">${sourceIcon(e.source)}</span>
+              <span class="text-sm font-medium">${escapeHtml(e.title)}</span>
+              ${e.event_time?`<span class="text-[10px] text-gray-500 font-mono">${escapeHtml(e.event_time)}</span>`:''}
+              <span class="text-[10px] px-1.5 py-0.5 rounded ${e.source==='Fox'?'bg-orange-500/20 text-orange-300':'bg-blue-500/20 text-blue-300'}">${e.source||'Cara'}</span>
+              ${e.event_type?`<span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">${escapeHtml(e.event_type)}</span>`:''}
             </div>
-          `).join('')}
+            ${e.details?`<p class="text-xs text-gray-400 ml-6">${escapeHtml(e.details)}</p>`:''}
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+// ─── Agent Errors & Service Health ──────────────────────────────────────────
+function renderErrors() {
+  const el = document.getElementById('error-log');
+  const badge = document.getElementById('error-summary-badge');
+  const errors = cachedData.errors;
+  if (!errors.length) {
+    el.innerHTML = '<div class="text-center py-4"><div class="text-3xl mb-2">✅</div><p class="text-sm text-gray-400">No errors today</p></div>';
+    badge.className = 'text-xs text-green-400'; badge.textContent = '✓ All clear';
+    return;
+  }
+  badge.className = 'text-xs text-red-400 animate-pulse';
+  badge.textContent = `${errors.length} error${errors.length!==1?'s':''}`;
+  el.innerHTML = errors.map(e => {
+    const sevClass = e.severity==='critical'?'severity-critical':e.severity==='error'?'severity-error':e.severity==='warning'?'severity-warning':'severity-info';
+    return `<div class="bg-gray-800/50 rounded-lg px-3 py-2 text-xs">
+      <div class="flex items-center justify-between mb-1">
+        <div class="flex items-center gap-2">
+          <span class="${sevClass} font-medium uppercase">${e.severity||'error'}</span>
+          <span class="text-gray-500 font-mono">${escapeHtml(e.source||'')}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          ${e.count>1?`<span class="bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded text-[10px]">×${e.count}</span>`:''}
+          <span class="text-gray-500">${timeAgo(e.created_at)}</span>
         </div>
       </div>
-    `;
+      <p class="text-gray-300 break-all">${escapeHtml(e.message)}</p>
+    </div>`;
   }).join('');
 }
 
-function setKanbanFilter(f) { kanbanFilter = f; renderKanban(); }
-
-function handleDrop(event, column) {
-  event.preventDefault();
-  event.currentTarget.classList.remove('drag-over');
-  const taskId = event.dataTransfer.getData('text/plain');
-  // Update locally (visual feedback) — actual persistence via sync.js
-  const task = cachedData.tasks.find(t => t.id === taskId);
-  if (task) { task.col = column; renderKanban(); renderQuickStats(); }
-  // Note: to persist, you'd POST to an API or update Neon directly
+function renderServices() {
+  const el = document.getElementById('service-health');
+  const services = cachedData.services;
+  if (!services.length) { el.innerHTML = '<p class="text-xs text-gray-600">No service data</p>'; return; }
+  el.innerHTML = services.map(s => `
+    <div class="flex items-center justify-between bg-gray-800/50 rounded-lg px-3 py-2">
+      <div class="flex items-center gap-2">
+        <div class="w-2.5 h-2.5 rounded-full flex-shrink-0 ${s.healthy?'bg-green-400':'bg-red-400 animate-pulse'}"></div>
+        <span class="text-sm">${escapeHtml(s.name)}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-xs font-mono ${s.healthy?'text-green-400':'text-red-400'}">${s.http_code||'—'}</span>
+        <span class="text-xs text-gray-500">${timeAgo(s.last_check)}</span>
+      </div>
+    </div>`).join('');
 }
 
-// ─── Activity ───────────────────────────────────────────────────────────────
+// ─── Activity (rich) ────────────────────────────────────────────────────────
+const CAT_ICONS = { file:'📁', exec:'⚡', browser:'🌐', message:'💬', cron:'⏰', search:'🔍', deployment:'🚀', task:'📋', error:'🔴', sync:'🔄', gateway:'🌐', other:'📌' };
+const CAT_COLORS = { file:'bg-blue-500/20 text-blue-300', exec:'bg-yellow-500/20 text-yellow-300', browser:'bg-green-500/20 text-green-300', message:'bg-purple-500/20 text-purple-300', cron:'bg-orange-500/20 text-orange-300', deployment:'bg-cyan-500/20 text-cyan-300', error:'bg-red-500/20 text-red-300', task:'bg-indigo-500/20 text-indigo-300', sync:'bg-gray-500/20 text-gray-300', gateway:'bg-teal-500/20 text-teal-300', other:'bg-gray-500/20 text-gray-300' };
+
+function inferCategory(type, msg) {
+  if (!msg) return type || 'other';
+  const m = msg.toLowerCase();
+  if (m.includes('deploy')) return 'deployment';
+  if (m.includes('cron')||m.includes('schedule')) return 'cron';
+  if (m.includes('error')||m.includes('fail')) return 'error';
+  if (m.includes('file')||m.includes('write')||m.includes('read')) return 'file';
+  if (m.includes('exec')||m.includes('command')) return 'exec';
+  if (m.includes('browser')) return 'browser';
+  if (m.includes('message')||m.includes('telegram')) return 'message';
+  return type || 'other';
+}
+
 function renderActivity() {
   const el = document.getElementById('activity-feed');
-  const items = cachedData.activity;
+  const items = cachedData.activity.map(a => ({ ...a, category: a.category || inferCategory(a.event_type, a.summary) }));
   if (!items.length) { el.innerHTML = '<p class="text-gray-500 text-sm">No activity yet</p>'; return; }
-  
-  const icons = { sync: '🔄', task: '📋', session: '🔌', gateway: '🌐', error: '❌' };
-  el.innerHTML = items.map(a => `
+  document.getElementById('activity-count').textContent = `(${items.length} total)`;
+
+  // Filters
+  const cats = [...new Set(items.map(a=>a.category))];
+  document.getElementById('activity-filters').innerHTML = `
+    <button onclick="setActivityFilter('all')" class="px-3 py-1 rounded-lg text-xs border ${activityFilter==='all'?'bg-blue-600/20 text-blue-400 border-blue-500/30':'bg-gray-800 text-gray-400 border-gray-700'}">All</button>
+    ${cats.map(c=>`<button onclick="setActivityFilter('${c}')" class="px-3 py-1 rounded-lg text-xs border ${activityFilter===c?(CAT_COLORS[c]||'bg-gray-600/20 text-gray-300')+' border-gray-700':'bg-gray-800 text-gray-400 border-gray-700'}">${CAT_ICONS[c]||'📌'} ${c}</button>`).join('')}`;
+
+  let displayed = activityFilter==='all' ? items : items.filter(a=>a.category===activityFilter);
+  if (activitySort==='category') displayed = [...displayed].sort((a,b)=>(a.category||'').localeCompare(b.category||''));
+
+  el.innerHTML = displayed.slice(0,100).map(a => `
     <div class="card fade-in flex items-start gap-3 !p-3">
-      <span>${icons[a.event_type] || '📌'}</span>
+      <span class="text-lg mt-0.5">${CAT_ICONS[a.category]||'📌'}</span>
       <div class="flex-1 min-w-0">
-        <p class="text-sm">${escapeHtml(a.summary || '')}</p>
-        <p class="text-xs text-gray-600">${timeAgo(a.created_at)}${a.source ? ` · ${a.source}` : ''}</p>
+        <div class="flex items-center gap-2 mb-0.5">
+          <span class="text-sm font-medium truncate">${escapeHtml((a.summary||'').slice(0,120))}</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded ${CAT_COLORS[a.category]||'bg-gray-500/20 text-gray-300'}">${a.category}</span>
+        </div>
+        ${a.details_text?`<p class="text-xs text-gray-500 truncate">${escapeHtml(a.details_text)}</p>`:''}
+        <div class="flex items-center gap-3 text-xs text-gray-600 mt-1">
+          <span>${timeAgo(a.created_at)}</span>
+          ${a.source?`<span>· ${a.source}</span>`:''}
+          ${a.cost?`<span>· 💰 $${parseFloat(a.cost).toFixed(4)}</span>`:''}
+          ${a.duration_ms?`<span>· ⏱ ${(a.duration_ms/1000).toFixed(1)}s</span>`:''}
+        </div>
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
+}
+
+function setActivityFilter(f) { activityFilter=f; renderActivity(); }
+function setActivitySort(s) {
+  activitySort=s;
+  document.getElementById('as-time').className = `text-xs px-2 py-1 rounded ${s==='time'?'bg-blue-600/20 text-blue-400':'text-gray-500 hover:text-gray-300'}`;
+  document.getElementById('as-category').className = `text-xs px-2 py-1 rounded ${s==='category'?'bg-blue-600/20 text-blue-400':'text-gray-500 hover:text-gray-300'}`;
+  renderActivity();
+}
+
+// ─── Search ─────────────────────────────────────────────────────────────────
+function doSearch() {
+  const q = document.getElementById('search-input').value.toLowerCase().trim();
+  const el = document.getElementById('search-results');
+  if (!q) { el.innerHTML = ''; return; }
+
+  const results = [];
+  const typeIcons = { session:'🔌', task:'📋', activity:'⚡' };
+
+  // Search sessions
+  for (const s of cachedData.sessions) {
+    const text = JSON.stringify(s).toLowerCase();
+    if (text.includes(q)) results.push({ type:'session', title: s.session_id||s.key||'Session', snippet: `Model: ${s.model||'unknown'} · ${s.channel||''}`, data: s });
+  }
+  // Search tasks
+  for (const t of cachedData.tasks) {
+    if ((t.title||'').toLowerCase().includes(q) || (t.description||'').toLowerCase().includes(q))
+      results.push({ type:'task', title: t.title, snippet: `${t.col} · ${t.project||''}`, data: t });
+  }
+  // Search activity
+  for (const a of cachedData.activity) {
+    if ((a.summary||'').toLowerCase().includes(q))
+      results.push({ type:'activity', title: a.summary, snippet: `${a.event_type} · ${timeAgo(a.created_at)}`, data: a });
+  }
+
+  const filtered = searchFilter==='all' ? results : results.filter(r=>r.type===searchFilter);
+
+  if (!filtered.length) { el.innerHTML = `<p class="text-gray-500 text-sm text-center mt-8">No results for "${escapeHtml(q)}"</p>`; return; }
+  el.innerHTML = filtered.map(r => `
+    <div class="card fade-in flex items-start gap-3 !p-3 mb-2">
+      <span class="text-lg">${typeIcons[r.type]||'📄'}</span>
+      <div><p class="text-sm font-medium">${escapeHtml(r.title)}</p>
+        ${r.snippet?`<p class="text-xs text-gray-500 mt-0.5">${escapeHtml(r.snippet)}</p>`:''}
+        <span class="text-[10px] text-gray-600 mt-1 inline-block bg-gray-800 px-1.5 py-0.5 rounded">${r.type}</span>
+      </div>
+    </div>`).join('');
+}
+
+function setSearchFilter(f) {
+  searchFilter = f;
+  ['all','session','task','activity'].forEach(x => {
+    const btn = document.getElementById('stf-'+x);
+    if (f===x) btn.className='px-3 py-1 rounded-lg text-xs border bg-blue-600/20 text-blue-400 border-blue-500/30';
+    else btn.className='px-3 py-1 rounded-lg text-xs border bg-gray-800 text-gray-400 border-gray-700';
+  });
+  doSearch();
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-function escapeHtml(s) {
-  if (!s) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
+function escapeHtml(s) { if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function timeAgo(iso) {
   if (!iso) return '—';
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ${mins % 60}m ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  const diff = Date.now()-new Date(iso).getTime();
+  const mins = Math.floor(diff/60000);
+  if (mins<1) return 'just now'; if (mins<60) return `${mins}m ago`;
+  const hrs = Math.floor(mins/60);
+  if (hrs<24) return `${hrs}h ${mins%60}m ago`;
+  return `${Math.floor(hrs/24)}d ago`;
 }
-
 function formatUptime(seconds) {
   if (!seconds) return '—';
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  const d=Math.floor(seconds/86400), h=Math.floor((seconds%86400)/3600), m=Math.floor((seconds%3600)/60);
+  if (d>0) return `${d}d ${h}h`; if (h>0) return `${h}h ${m}m`; return `${m}m`;
 }
-
 function formatTime(minutes) {
   if (!minutes) return '0m';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h === 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
+  const h=Math.floor(minutes/60), m=minutes%60;
+  if (h===0) return `${m}m`; if (m===0) return `${h}h`; return `${h}h ${m}m`;
 }
 
-// ─── Demo Data (when Neon isn't configured) ─────────────────────────────────
+// ─── Demo Data ──────────────────────────────────────────────────────────────
 function renderDemoData() {
+  const now = new Date();
   cachedData = {
-    system: { cpu_usage: 23.5, mem_total_gb: 24, mem_used_gb: 14.2, mem_free_gb: 9.8, disk_total_gb: 460, disk_used_gb: 187, disk_free_gb: 273, load_avg: '[1.2, 1.5, 1.8]', uptime_seconds: 432000 },
-    gateway: { status: 'running', version: '0.12.0', pid: 12345, uptime: '5d 2h', created_at: new Date().toISOString() },
-    sessions: [{ session_id: 'demo', raw_json: 'Gateway: running (PID 12345)\nActive sessions: 3\n  main (telegram) — claude-opus-4 — 45m\n  subagent:abc — claude-sonnet-4 — 2m\n  subagent:def — claude-sonnet-4 — 1m', created_at: new Date().toISOString() }],
+    system: { cpu_usage:23.5, mem_total_gb:24, mem_used_gb:14.2, mem_free_gb:9.8, disk_total_gb:460, disk_used_gb:187, disk_free_gb:273, load_avg:'[1.2, 1.5, 1.8]', uptime_seconds:432000 },
+    gateway: { status:'running', version:'0.12.0', pid:12345, uptime:'5d 2h', created_at:now.toISOString() },
+    sessions: [
+      { session_id:'agent:main:telegram:group', key:'agent:main:telegram:group', model:'claude-opus-4', tokens:'142k/200k', token_pct:71, status:'active', channel:'telegram', source:'Cara', age:'45m', cost:'1.2340', messages:23, created_at:now.toISOString() },
+      { session_id:'agent:main:subagent:abc', key:'agent:main:subagent:abc', model:'claude-sonnet-4', tokens:'12k/200k', token_pct:6, status:'active', channel:'subagent', source:'Cara', age:'2m', cost:'0.0450', messages:5, created_at:now.toISOString() },
+      { session_id:'agent:main:telegram:dm', key:'agent:main:telegram:dm', model:'claude-opus-4', tokens:'89k/200k', token_pct:44, status:'idle', channel:'telegram', source:'Cara', age:'1h 20m', cost:'0.8900', messages:15, created_at:new Date(now-3600000).toISOString() },
+      { session_id:'agent:fox:telegram:group', key:'agent:fox:telegram:group', model:'claude-sonnet-4', tokens:'5k/200k', token_pct:2, status:'active', channel:'telegram', source:'Fox', age:'10m', cost:'0.0120', messages:3, created_at:now.toISOString() },
+      { session_id:'agent:main:web:dashboard', key:'agent:main:web:dashboard', model:'claude-sonnet-4', tokens:'180k/200k', token_pct:90, status:'completed', channel:'web', source:'Cara', age:'3h', cost:'2.1500', messages:45, created_at:new Date(now-10800000).toISOString() },
+    ],
     tasks: [
-      { id: '1', title: 'Dashboard v2', description: 'Build static replacement', col: 'in-progress', project: 'Infrastructure', time_minutes: 120, cost_estimate: 5 },
-      { id: '2', title: 'Fleet health monitoring', col: 'queued', project: 'Fleet', time_minutes: 60, cost_estimate: 2 },
-      { id: '3', title: 'TEAS Chapter 4', col: 'done', project: 'TEAS Study Guide', time_minutes: 90, cost_estimate: 3 },
-      { id: '4', title: 'Neon DB setup', col: 'ideas', project: 'Infrastructure', time_minutes: 30, cost_estimate: 0 },
+      { id:'1', title:'Dashboard v2 Expansion', description:'Add calendar, errors, search, rich sessions', col:'in-progress', project:'Infrastructure', time_minutes:120, cost_estimate:5 },
+      { id:'2', title:'Fleet health monitoring', col:'queued', project:'Fleet', time_minutes:60, cost_estimate:2 },
+      { id:'3', title:'TEAS Chapter 4', col:'done', project:'TEAS Study Guide', time_minutes:90, cost_estimate:3 },
+      { id:'4', title:'Neon DB setup', col:'ideas', project:'Infrastructure', time_minutes:30, cost_estimate:0 },
+      { id:'5', title:'Social media automation', description:'X/Twitter browser-based posting', col:'in-progress', project:'Other Projects', time_minutes:45, cost_estimate:1.5 },
+      { id:'6', title:'Fox agent deployment', col:'queued', project:'Fleet', time_minutes:90, cost_estimate:2.5 },
     ],
     activity: [
-      { event_type: 'sync', summary: 'Data sync completed', source: 'sync.js', created_at: new Date().toISOString() },
-      { event_type: 'gateway', summary: 'Gateway restarted', source: 'cron', created_at: new Date(Date.now() - 3600000).toISOString() },
+      { event_type:'sync', summary:'Data sync completed successfully', source:'sync.js', category:'sync', created_at:now.toISOString(), duration_ms:1200 },
+      { event_type:'deployment', summary:'Dashboard v2 deployed to GitHub Pages', source:'git', category:'deployment', created_at:new Date(now-1800000).toISOString(), cost:'0.05' },
+      { event_type:'task', summary:'TEAS Chapter 4 review completed', source:'kanban', category:'task', created_at:new Date(now-3600000).toISOString(), duration_ms:5400000 },
+      { event_type:'error', summary:'Fox SSH connection timeout', source:'sync.js', category:'error', created_at:new Date(now-5400000).toISOString() },
+      { event_type:'cron', summary:'Heartbeat check executed', source:'cron', category:'cron', created_at:new Date(now-7200000).toISOString(), duration_ms:800 },
+      { event_type:'gateway', summary:'Gateway restarted after update', source:'cron', category:'gateway', created_at:new Date(now-10800000).toISOString() },
+      { event_type:'message', summary:'Telegram group message processed', source:'telegram', category:'message', created_at:new Date(now-14400000).toISOString(), cost:'0.0234' },
+      { event_type:'exec', summary:'Browser automation: X/Twitter post', source:'browser', category:'exec', created_at:new Date(now-18000000).toISOString(), duration_ms:12000 },
+      { event_type:'file', summary:'Memory file updated: 2026-02-12.md', source:'agent', category:'file', created_at:new Date(now-21600000).toISOString() },
     ],
     fleet: [
-      { node_name: 'cara', role: 'primary', status: 'online', updated_at: new Date().toISOString() },
-      { node_name: 'fox', role: 'secondary', status: 'offline', updated_at: new Date(Date.now() - 7200000).toISOString() },
+      { node_name:'cara', role:'primary', status:'online', updated_at:now.toISOString() },
+      { node_name:'fox', role:'secondary', status:'offline', updated_at:new Date(now-7200000).toISOString() },
+    ],
+    calendar: [
+      { title:'Heartbeat check', event_hour:0, event_time:'00:00', source:'Cara', event_type:'cron', details:'Gateway health + fleet status', event_date:now.toLocaleDateString() },
+      { title:'Data sync', event_hour:0, event_time:'00:02', source:'Cara', event_type:'cron', details:'Push metrics to Neon DB' },
+      { title:'Morning social media check', event_hour:8, event_time:'08:00', source:'Cara', event_type:'scheduled', details:'Check X/Twitter, Instagram engagement' },
+      { title:'TEAS study session', event_hour:10, event_time:'10:00', source:'Cara', event_type:'task', details:'Chapter 5: Science review' },
+      { title:'Nurse.org deploy check', event_hour:12, event_time:'12:00', source:'Cara', event_type:'cron', details:'Verify staging deployment health' },
+      { title:'Fox fleet sync', event_hour:14, event_time:'14:00', source:'Fox', event_type:'cron', details:'Cross-node data synchronization' },
+      { title:'GA4 traffic report', event_hour:16, event_time:'16:00', source:'Cara', event_type:'scheduled', details:'Daily traffic summary for TMR + Nurse.org' },
+      { title:'Dashboard metrics push', event_hour:18, event_time:'18:00', source:'Cara', event_type:'cron', details:'End-of-day metrics snapshot' },
+      { title:'Memory consolidation', event_hour:22, event_time:'22:00', source:'Cara', event_type:'scheduled', details:'Daily memory file cleanup and MEMORY.md update' },
+    ],
+    errors: [
+      { message:'SSH connection to fox-mini.local timed out after 15s', severity:'warning', source:'sync.js', count:3, created_at:new Date(now-5400000).toISOString() },
+      { message:'Rate limit exceeded on X/Twitter API (429)', severity:'error', source:'browser', count:1, created_at:new Date(now-18000000).toISOString() },
+      { message:'Neon connection pool exhausted — retrying in 5s', severity:'warning', source:'sync.js', count:2, created_at:new Date(now-28800000).toISOString() },
+    ],
+    services: [
+      { name:'TEAS Study Site', healthy:true, http_code:'200', last_check:now.toISOString() },
+      { name:'AI Tutor API', healthy:true, http_code:'200', last_check:now.toISOString() },
+      { name:'Nurse.org', healthy:true, http_code:'200', last_check:now.toISOString() },
+      { name:'Cara HQ Dashboard', healthy:true, http_code:'200', last_check:now.toISOString() },
+      { name:'Fox Mini (SSH)', healthy:false, http_code:'timeout', last_check:new Date(now-5400000).toISOString() },
+      { name:'Neon Postgres', healthy:true, http_code:'200', last_check:now.toISOString() },
     ],
   };
   renderAll();
