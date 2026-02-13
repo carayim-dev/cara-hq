@@ -257,7 +257,7 @@ async function sync() {
       await query(
         `INSERT INTO gateway_status (node_name, status, version, pid, uptime, raw_json)
          VALUES ($1,$2,$3,$4,$5,$6)`,
-        [gw.node_name, gw.status, gw.version, gw.pid, gw.uptime, gw.raw_json]
+        [gw.node_name, gw.status, gw.version, gw.pid, gw.uptime, JSON.stringify({ output: gw.raw_json })]
       );
       console.log('  ✓ Gateway status');
     }
@@ -269,7 +269,7 @@ async function sync() {
     if (sessData.length > 0 && sessData[0].raw_json) {
       await query(
         `INSERT INTO sessions (session_id, raw_json) VALUES ('snapshot', $1)`,
-        [sessData[0].raw_json]
+        [JSON.stringify({ output: sessData[0].raw_json })]
       );
       console.log('  ✓ Sessions');
     }
