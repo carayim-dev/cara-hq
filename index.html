@@ -195,7 +195,7 @@
 
 <script>
 // ─── Config ─────────────────────────────────────────────────────────────────
-const NEON_CONFIG = { host: 'ep-cold-leaf-aitt2ist-pooler.c-4.us-east-1.aws.neon.tech', connectionString: 'postgresql://neondb_owner:npg_5ywKDaTvbx7R@ep-cold-leaf-aitt2ist-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require' };
+const NEON_CONFIG = { host: 'ep-cold-leaf-aitt2ist.c-4.us-east-1.aws.neon.tech', connectionString: 'postgresql://neondb_owner:npg_5ywKDaTvbx7R@ep-cold-leaf-aitt2ist-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require' };
 const PASSWORD_HASH = 'f61f5c5e22749aeba2bd920352dbd4c9f63e0ebaed6df623b09c836ffcbec2eb';
 const REFRESH_INTERVAL = 30000;
 
@@ -229,7 +229,7 @@ async function neonSQL(query, params = []) {
   try {
     const resp = await fetch(`https://${NEON_CONFIG.host}/sql`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Neon-Connection-String': NEON_CONFIG.connectionString },
+      headers: { 'Neon-Connection-String': NEON_CONFIG.connectionString },
       body: JSON.stringify({ query, params }),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
